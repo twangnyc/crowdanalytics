@@ -3,132 +3,15 @@ import numpy as np
 import matplotlib.pyplot as plt
 from math import sqrt, log
 from sklearn import linear_model
-from sklearn.metrics import confusion_matrix, roc_auc_score, roc_curve, auc
 from sklearn.cross_validation import *
 from sklearn.datasets import make_sparse_spd_matrix
 from sklearn.covariance import GraphLassoCV, ledoit_wolf, GraphLasso, ShrunkCovariance
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingRegressor
+from sklearn.svm import SVR
 import sklearn.preprocessing as preprocessing
+from supportfunction import *
+from inferfunction import *
 
-
-
-
-
-def dummyData(df):
-    """This function make categorical data to dummy variable"""
-    data = df[:]
-    cg_column = list(getCategoricalCol())
-    df_column = list(df.columns)
-    column = list(np.intersect1d(cg_column, df_column))
-    for col in column:
-        print col
-        n_value = len(data[col].value_counts())
-        if n_value > 2:
-            dummy = pd.get_dummies(data[col], col)
-            data = data.join(dummy)
-            data = data.drop(col, 1)
-    print "Create %d dummy variables" % (len(data.columns)-len(df.columns))
-    return data
-
-
-
-
-def precisionCol(cleandata, k):
-    model = ShrunkCovariance()
-    model.fit(cleandata)
-    pre_ = pd.DataFrame(model.get_precision())
-    pre_.index = cleandata.columns
-    pre_.columns = cleandata.columns
-    test = abs(pre_['Y'])
-    test.sort()
-    test = test[-k:]
-    coltest = (test.index).drop('Y')
-    return coltest
-
-
-def getNumericCol():
-    '''Get column having numerical content'''
-    document = "./data/CAX_ExacerbationModeling_MetaData.csv"
-    coldata = pd.read_csv(document)
-    col = coldata[coldata['Column Type'] == 'Numeric']['varnum']
-    return col
-
-def getCategoricalCol():
-    '''Get column having categorical content'''
-    document = "./data/CAX_ExacerbationModeling_MetaData.csv"
-    coldata = pd.read_csv(document)
-    col = coldata[coldata['Column Type'] == 'Category']['varnum']
-    return col
-
-
-def getDfSummary(df):
-    length=len(df)
-    column=df.columns
-    summary=df.describe().T
-    length2=len(summary)
-    summary['NA Count']=length-summary['count']
-    diffnum=[1]*length2
-    j=0
-    for i in column:
-        diffnum[j]=len(df[i].value_counts())
-        j=j+1
-    summary['distinct values']=diffnum
-    return summary
-
-
-def getNAnumber(df):
-    length = len(df)
-    column = df.columns
-    summary = df.describe().T
-    list = length - summary['count']
-    return list
-
-def dropNAdata(df):
-    columns = df.columns
-    cleandf = df[:]
-    length = len(df)
-    for column in columns:
-        na = getNAnumber(pd.DataFrame(df[column]))
-        if float(na)/length >= 0.4 :
-            cleandf = cleandf.drop(column, 1)   #Drop data columns with too many NA
-    print "Delete %d columns" %(len(df.columns) - len(cleandf.columns))
-    return cleandf
-
-
-def imputeNA(df):
-    column = df.columns
-    indexs = df.index
-    impute = preprocessing.Imputer(strategy='most_frequent') #using most_frequent ones to fill in NA
-    impute.fit(df)
-    cleaned = impute.transform(df)
-    cleanedData = pd.DataFrame(cleaned, columns=column, index = indexs)
-    return cleanedData
-
-
-def normData(df):
-    data = df[:]
-    numCol = getNumericCol() # only normalize numerical data
-    try:
-        for col in numCol:
-            data[col] = preprocessing.scale(data[col])
-    except:
-        pass
-    return data
-
-
-
-def plotAUC(truth, pred, lab):
-    fpr, tpr, thresholds = roc_curve(truth, pred)
-    roc_auc = auc(fpr, tpr)
-    c = (np.random.rand(), np.random.rand(), np.random.rand())
-    plt.plot(fpr, tpr, color=c, label= lab+' (AUC = %0.2f)' % roc_auc)
-    plt.plot([0, 1], [0, 1], 'k--')
-    plt.xlim([0.0, 1.0])
-    plt.ylim([0.0, 1.0])
-    plt.xlabel('FPR')
-    plt.ylabel('TPR')
-    plt.title('ROC')
-    plt.legend(loc="lower right")
 
 
 def submissiontest(precisionk, c):
@@ -267,6 +150,8 @@ def ctest(topk):
 
 def rfttest(precisionk, min_samplesplit, min_sampleleaf, draw = 'True'):
     cleandata = pd.read_csv("./data/cleaned.csv")
+    mask = np.isnan(cleandata['Y'])
+    cleandata = cleandata[mask == False]
     cleandata = cleandata.drop('Unnamed: 0', 1)
     #After c is chosen, use this to draw AUC plot
     train_id, test_id = train_test_split(cleandata.index, test_size=0.2)  # test_ratio = 0.2
@@ -275,9 +160,9 @@ def rfttest(precisionk, min_samplesplit, min_sampleleaf, draw = 'True'):
     coltest = precisionCol(train, precisionk)
     coltest = list(coltest)
     coltest.append('Y')
-    train = train[coltest]
-    test = test[coltest]
-    randomforest = RandomForestClassifier(n_estimators = 1000, criterion = 'entropy', min_samples_split = min_samplesplit, min_samples_leaf = min_sampleleaf)
+    #train = train[coltest]
+    #test = test[coltest]
+    randomforest = RandomForestClassifier(n_estimators = 2000, n_jobs = -1, criterion = 'entropy', min_samples_split = min_samplesplit, min_samples_leaf = min_sampleleaf)
     randomforest.fit(train.drop('Y',1),train['Y'])
     fpr, tpr, thresholds = roc_curve(test['Y'], randomforest.predict_proba(test.drop('Y',1))[:,1])
     print auc(fpr, tpr)
@@ -297,10 +182,10 @@ def submissionrft(precisionk, min_samplesplit, min_sampleleaf):
     mask = np.isnan(data['Y'])
     train = data[mask == False]
     test = data[mask == True]
-    train = train[coltest]
-    test = test[coltest]
+    #train = train[coltest]
+    #test = test[coltest]
     indexs = test.index
-    randomforest = RandomForestClassifier(n_estimators = 1000, criterion = 'entropy', min_samples_split = min_samplesplit, min_samples_leaf = min_sampleleaf)
+    randomforest = RandomForestClassifier(n_estimators = 2000, n_jobs=-1, criterion = 'entropy', min_samples_split = min_samplesplit, min_samples_leaf = min_sampleleaf)
     randomforest.fit(train.drop('Y',1),train['Y'])
     ans = randomforest.predict_proba(test.drop('Y',1))[:,1]
     ans = pd.DataFrame(ans, index = indexs, columns=['Y'])
@@ -311,10 +196,84 @@ def submissionrft(precisionk, min_samplesplit, min_sampleleaf):
     submit.to_csv('./data/CAX_ExacerbationModeling_Submission_rft_'+str(min_samplesplit)+'_'+str(min_sampleleaf)+'.csv')
 
 
+def gbrtest(precisionk, min_sampleleaf, min_samplesplit, draw = 'False'):
+    cleandata = pd.read_csv("./data/cleaned.csv")
+    mask = np.isnan(cleandata['Y'])
+    cleandata = cleandata[mask == False]
+    cleandata = cleandata.drop('Unnamed: 0', 1)
+    #After c is chosen, use this to draw AUC plot
+    train_id, test_id = train_test_split(cleandata.index, test_size=0.2)  # test_ratio = 0.2
+    train = cleandata.ix[train_id]
+    test = cleandata.ix[test_id]
+    coltest = precisionCol(train, precisionk)
+    coltest = list(coltest)
+    coltest.append('Y')
+    #train = train[coltest]
+    #test = test[coltest]
+    gradientboost = GradientBoostingRegressor(n_estimators= 400, max_depth= 10, min_samples_split = min_samplesplit, min_samples_leaf = min_sampleleaf)
+    gradientboost.fit(train.drop('Y',1),train['Y'])
+    fpr, tpr, thresholds = roc_curve(test['Y'], gradientboost.decision_function(test.drop('Y',1)))
+    print auc(fpr, tpr)
+    if draw == 'True':
+        plotAUC(test['Y'], gradientboost.decision_function(test.drop('Y',1)), 'Gradient Boosting')
+        plt.savefig("testnorm_randomforest.png", dpi = 120)
+
+
+def submissiongbr(precisionk, min_samplesplit, min_sampleleaf):
+    cleandata = pd.read_csv("./data/cleaned.csv")
+    cleandata = cleandata.drop('Unnamed: 0', 1)
+    coltest = precisionCol(cleandata, precisionk)
+    coltest = list(coltest)
+    coltest.append('Y')
+    data = pd.read_csv('./data/bigcleaned.csv')
+    data.index = data['sid']
+    data.drop('sid',1)
+    mask = np.isnan(data['Y'])
+    train = data[mask == False]
+    test = data[mask == True]
+    #train = train[coltest]
+    #test = test[coltest]
+    indexs = test.index
+    gradientboost = GradientBoostingRegressor(min_samples_split = min_samplesplit, min_samples_leaf = min_sampleleaf)
+    gradientboost.fit(train.drop('Y',1),train['Y'])
+    ans = gradientboost.decision_function(test.drop('Y',1))
+    ans = pd.DataFrame(ans, index = indexs, columns=['Y'])
+    submit = pd.read_csv('./data/CAX_ExacerbationModeling_SubmissionTemplate.csv')
+    submit.index = submit['sid']
+    submit = submit.drop('sid',1)
+    submit['Exacebator'] = ans['Y']
+    submit.to_csv('./data/CAX_ExacerbationModeling_Submission_gbr_'+str(min_samplesplit)+'_'+str(min_sampleleaf)+'.csv')
+
+def othertest(precisionk, draw = 'False'):
+    cleandata = pd.read_csv("./data/cleaned.csv")
+    mask = np.isnan(cleandata['Y'])
+    cleandata = cleandata[mask == False]
+    cleandata = cleandata.drop('Unnamed: 0', 1)
+    #After c is chosen, use this to draw AUC plot
+    train_id, test_id = train_test_split(cleandata.index, test_size=0.2)  # test_ratio = 0.2
+    train = cleandata.ix[train_id]
+    test = cleandata.ix[test_id]
+    coltest = precisionCol(train, precisionk)
+    coltest = list(coltest)
+    coltest.append('Y')
+    train = train[coltest]
+    test = test[coltest]
+    model = SVR()
+    model.fit(train.drop('Y',1),train['Y'])
+    fpr, tpr, thresholds = roc_curve(test['Y'], model.decision_function(test.drop('Y',1)))
+    print auc(fpr, tpr)
+    if draw == 'True':
+        plotAUC(test['Y'], model.decision_function(test.drop('Y',1)), 'Gradient Boosting')
+        plt.savefig("testnorm_randomforest.png", dpi = 120)
+
+
 
 def main():
-    rfttest(precisionk= 500, min_sampleleaf=50, min_samplesplit=50)
-    submissionrft(precisionk=500, min_sampleleaf=50, min_samplesplit=50)
+    #othertest(1000)
+    gbrtest(3000, min_sampleleaf=15, min_samplesplit=20)
+    #submissiongbr(3000, min_sampleleaf=15, min_samplesplit=20)
+    #rfttest(precisionk= 3000, min_sampleleaf=15, min_samplesplit=10)
+    #submissionrft(precisionk=3000, min_sampleleaf=15, min_samplesplit=10)
     #auctest(50, 0.1, 'False')
     #submissiontest(500, 0.005)
     #for c in range(1,1001,200):
