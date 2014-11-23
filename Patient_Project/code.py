@@ -6,71 +6,11 @@ from sklearn import linear_model
 from sklearn.cross_validation import *
 from sklearn.datasets import make_sparse_spd_matrix
 from sklearn.covariance import GraphLassoCV, ledoit_wolf, GraphLasso, ShrunkCovariance
-from sklearn.ensemble import RandomForestClassifier, GradientBoostingRegressor
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier, ExtraTreesClassifier, AdaBoostClassifier, BaggingClassifier
 from sklearn.svm import SVR
 import sklearn.preprocessing as preprocessing
 from supportfunction import *
 from inferfunction import *
-
-
-
-def submissiontest(precisionk, c):
-    if False:
-    #Create and clean the big data
-        cleandata = pd.read_csv("./data/cleaned.csv")
-        cleandata = cleandata.drop('Unnamed: 0', 1)
-        coltest = precisionCol(cleandata, 200)
-        coltest = list(coltest)
-        coltest.append('Y')
-
-        document = "./data/CAX_ExacerbationModeling_TRAIN_data.csv"
-        data = pd.read_csv(document)
-        testdocument = "./data/CAX_ExacerbationModeling_Public_TEST_data.csv"
-        test = pd.read_csv(testdocument)
-        data = data.append(test)
-        data.index = data['sid']
-        data = data.drop('sid',1)
-        data = data.sort_index()
-        Y = data['Exacebator']
-        Y = pd.DataFrame(Y, index=data.index)
-        data = data.drop('Exacebator',1)
-        index_ = data.index
-        cleandata = dropNAdata(data)
-        cleandata.index = index_
-        cleandata = imputeNA(cleandata)
-        cleandata.index = index_
-        cleandata = dummyData(cleandata)
-        cleandata.index = index_
-        cleandata = normData(cleandata)
-        cleandata.index = index_
-
-    if True:
-        #makeprediction
-        #Read Data with dummy variables that has been cleaned and normalized
-        cleandata = pd.read_csv("./data/cleaned.csv")
-        cleandata = cleandata.drop('Unnamed: 0', 1)
-        coltest = precisionCol(cleandata, precisionk)
-        coltest = list(coltest)
-        coltest.append('Y')
-
-        data = pd.read_csv('./data/bigcleaned.csv')
-        data.index = data['sid']
-        data.drop('sid',1)
-        mask = np.isnan(data['Y'])
-        train = data[mask == False]
-        test = data[mask == True]
-        train = train[coltest]
-        test = test[coltest]
-        indexs = test.index
-        logreg = linear_model.LogisticRegression(penalty='l1', C=c)
-        logreg.fit(train.drop('Y',1),train['Y'])
-        ans = logreg.predict_proba(test.drop('Y',1))[:,1]
-        ans = pd.DataFrame(ans, index = indexs, columns=['Y'])
-        submit = pd.read_csv('./data/CAX_ExacerbationModeling_SubmissionTemplate.csv')
-        submit.index = submit['sid']
-        submit = submit.drop('sid',1)
-        submit['Exacebator'] = ans['Y']
-        submit.to_csv('./data/CAX_ExacerbationModeling_Submission_'+str(precisionk)+'_'+str(c)+'.csv')
 
 
 def xValAUC(tr, lab, k, cs, precision):
@@ -103,8 +43,13 @@ def xValAUC(tr, lab, k, cs, precision):
 
 def auctest(precisionk, c, draw = 'True'):
     #Read Data with dummy variables that has been cleaned and normalized
-    cleandata = pd.read_csv("./data/cleaned.csv")
-    cleandata = cleandata.drop('Unnamed: 0', 1)
+    cleandata = pd.read_csv("./data/cleaned_knnimpute.csv")
+    cleandata.index = cleandata.sid
+    cleandata = cleandata.drop('sid',1)
+    mask = np.isnan(cleandata['Y'])
+    cleandata = cleandata[mask == False]
+    #cleandata = pd.read_csv("./data/cleaned.csv")
+    #cleandata = cleandata.drop('Unnamed: 0', 1)
     #After c is chosen, use this to draw AUC plot
     train_id, test_id = train_test_split(cleandata.index, test_size=0.2)  # test_ratio = 0.3
     train = cleandata.ix[train_id]
@@ -149,10 +94,13 @@ def ctest(topk):
     plt.savefig("CV_C"+str(topk)+".png", dpi = 120)
 
 def rfttest(precisionk, min_samplesplit, min_sampleleaf, draw = 'True'):
-    cleandata = pd.read_csv("./data/cleaned.csv")
+    cleandata = pd.read_csv("./data/cleaned_knnimpute.csv")
+    cleandata.index = cleandata.sid
+    cleandata = cleandata.drop('sid',1)
+    #cleandata = pd.read_csv("./data/cleaned.csv")
     mask = np.isnan(cleandata['Y'])
     cleandata = cleandata[mask == False]
-    cleandata = cleandata.drop('Unnamed: 0', 1)
+    #cleandata = cleandata.drop('Unnamed: 0', 1)
     #After c is chosen, use this to draw AUC plot
     train_id, test_id = train_test_split(cleandata.index, test_size=0.2)  # test_ratio = 0.2
     train = cleandata.ix[train_id]
@@ -171,13 +119,15 @@ def rfttest(precisionk, min_samplesplit, min_sampleleaf, draw = 'True'):
         plt.savefig("testnorm_randomforest.png", dpi = 120)
 
 def submissionrft(precisionk, min_samplesplit, min_sampleleaf):
-    cleandata = pd.read_csv("./data/cleaned.csv")
-    cleandata = cleandata.drop('Unnamed: 0', 1)
+    cleandata = pd.read_csv("./data/cleaned_knnimpute.csv")
+    cleandata.index = cleandata.sid
+    cleandata = cleandata.drop('sid',1)
+    cleandata = cleandata[np.isnan(cleandata['Y']) == False]
     coltest = precisionCol(cleandata, precisionk)
     coltest = list(coltest)
     coltest.append('Y')
-    data = pd.read_csv('./data/bigcleaned.csv')
-    data.index = data['sid']
+    data = pd.read_csv('./data/cleaned_knnimpute.csv')
+    data.index = data.sid
     data.drop('sid',1)
     mask = np.isnan(data['Y'])
     train = data[mask == False]
@@ -194,6 +144,122 @@ def submissionrft(precisionk, min_samplesplit, min_sampleleaf):
     submit = submit.drop('sid',1)
     submit['Exacebator'] = ans['Y']
     submit.to_csv('./data/CAX_ExacerbationModeling_Submission_rft_'+str(min_samplesplit)+'_'+str(min_sampleleaf)+'.csv')
+
+
+
+def auctest(precisionk, c, draw = 'True'):
+    #Read Data with dummy variables that has been cleaned and normalized
+    cleandata = pd.read_csv("./data/cleaned_knnimpute.csv")
+    cleandata.index = cleandata.sid
+    cleandata = cleandata.drop('sid',1)
+    mask = np.isnan(cleandata['Y'])
+    cleandata = cleandata[mask == False]
+    #cleandata = pd.read_csv("./data/cleaned.csv")
+    #cleandata = cleandata.drop('Unnamed: 0', 1)
+    #After c is chosen, use this to draw AUC plot
+    train_id, test_id = train_test_split(cleandata.index, test_size=0.2)  # test_ratio = 0.3
+    train = cleandata.ix[train_id]
+    coltest = precisionCol(train, precisionk)
+    coltest = list(coltest)
+    coltest.append('Y')
+    train = train[coltest]
+    test = cleandata.ix[test_id]
+    test = test[coltest]
+    logreg = linear_model.LogisticRegression(C=c)
+    logreg.fit(train.drop('Y',1),train['Y'])
+    fpr, tpr, thresholds = roc_curve(test['Y'], logreg.predict_proba(test.drop('Y',1))[:,1])
+    print auc(fpr, tpr)
+    if draw == 'True':
+        plotAUC(test['Y'], logreg.predict_proba(test.drop('Y',1))[:,1], 'LR')
+        plt.savefig("testnorm_"+str(precisionk)+"_"+str(c)+".png", dpi = 120)
+
+
+def othertest(precisionk, draw = 'False'):
+    cleandata = pd.read_csv("./data/cleaned_knnimpute.csv")
+    cleandata.index = cleandata.sid
+    cleandata = cleandata.drop('sid',1)
+    mask = np.isnan(cleandata['Y'])
+    cleandata = cleandata[mask == False]
+    #After c is chosen, use this to draw AUC plot
+    train_id, test_id = train_test_split(cleandata.index, test_size=0.2)  # test_ratio = 0.2
+    train = cleandata.ix[train_id]
+    test = cleandata.ix[test_id]
+    coltest = precisionCol(train, precisionk)
+    coltest = list(coltest)
+    coltest.append('Y')
+    train = train[coltest]
+    test = test[coltest]
+    model = BaggingClassifier(base_estimator=linear_model.LogisticRegression(), n_estimators=100, max_features=200, n_jobs=-1)
+    model.fit(train.drop('Y',1),train['Y'])
+    fpr, tpr, thresholds = roc_curve(test['Y'], model.predict_proba(test.drop('Y',1))[:,1])
+    print auc(fpr, tpr)
+    if draw == 'True':
+        plotAUC(test['Y'], model.decision_function(test.drop('Y',1)), 'Gradient Boosting')
+        plt.savefig("testnorm_randomforest.png", dpi = 120)
+
+
+def othersubmission(precisionk):
+    cleandata = pd.read_csv("./data/cleaned_knnimpute.csv")
+    cleandata.index = cleandata.sid
+    cleandata = cleandata.drop('sid', 1)
+    mask = np.isnan(cleandata['Y'])
+    cleandata = cleandata[mask == False]
+    coltest = precisionCol(cleandata, precisionk)
+    coltest = list(coltest)
+    coltest.append('Y')
+    data = pd.read_csv('./data/cleaned_knnimpute.csv')
+    data.index = data['sid']
+    data.drop('sid',1)
+    mask = np.isnan(data['Y'])
+    train = data[mask == False]
+    test = data[mask == True]
+    train = train[coltest]
+    test = test[coltest]
+    indexs = test.index
+    model = GradientBoostingClassifier()
+    model.fit(train.drop('Y',1),train['Y'])
+    ans = model.predict_proba(test.drop('Y',1))[:,1]
+    ans = pd.DataFrame(ans, index = indexs, columns=['Y'])
+    submit = pd.read_csv('./data/CAX_ExacerbationModeling_SubmissionTemplate.csv')
+    submit.index = submit['sid']
+    submit = submit.drop('sid',1)
+    submit['Exacebator'] = ans['Y']
+    submit.to_csv('./data/CAX_ExacerbationModeling_Submission_gbr'+str(precisionk)+'.csv')
+
+
+
+
+
+
+def submissiontest(precisionk, c):
+    #makeprediction
+    #Read Data with dummy variables that has been cleaned and normalized
+    cleandata = pd.read_csv("./data/cleaned_knnimpute.csv")
+    cleandata.index = cleandata.sid
+    cleandata = cleandata.drop('sid',1)
+    mask = np.isnan(cleandata['Y'])
+    cleandata = cleandata[mask == False]
+    coltest = precisionCol(cleandata, precisionk)
+    coltest = list(coltest)
+    coltest.append('Y')
+    data = pd.read_csv('./data/cleaned_knnimpute.csv')
+    data.index = data['sid']
+    data.drop('sid',1)
+    mask = np.isnan(data['Y'])
+    train = data[mask == False]
+    test = data[mask == True]
+    train = train[coltest]
+    test = test[coltest]
+    indexs = test.index
+    logreg = linear_model.LogisticRegression(C=c)
+    logreg.fit(train.drop('Y',1),train['Y'])
+    ans = logreg.predict_proba(test.drop('Y',1))[:,1]
+    ans = pd.DataFrame(ans, index = indexs, columns=['Y'])
+    submit = pd.read_csv('./data/CAX_ExacerbationModeling_SubmissionTemplate.csv')
+    submit.index = submit['sid']
+    submit = submit.drop('sid',1)
+    submit['Exacebator'] = ans['Y']
+    submit.to_csv('./data/CAX_ExacerbationModeling_Submission_'+str(precisionk)+'_'+str(c).replace('.','')+'.csv')
 
 
 def gbrtest(precisionk, min_sampleleaf, min_samplesplit, draw = 'False'):
@@ -234,7 +300,7 @@ def submissiongbr(precisionk, min_samplesplit, min_sampleleaf):
     #train = train[coltest]
     #test = test[coltest]
     indexs = test.index
-    gradientboost = GradientBoostingRegressor(min_samples_split = min_samplesplit, min_samples_leaf = min_sampleleaf)
+    gradientboost = GradientBoostingRegressor(n_estimators= 400, max_depth= 10,min_samples_split = min_samplesplit, min_samples_leaf = min_sampleleaf)
     gradientboost.fit(train.drop('Y',1),train['Y'])
     ans = gradientboost.decision_function(test.drop('Y',1))
     ans = pd.DataFrame(ans, index = indexs, columns=['Y'])
@@ -244,38 +310,17 @@ def submissiongbr(precisionk, min_samplesplit, min_sampleleaf):
     submit['Exacebator'] = ans['Y']
     submit.to_csv('./data/CAX_ExacerbationModeling_Submission_gbr_'+str(min_samplesplit)+'_'+str(min_sampleleaf)+'.csv')
 
-def othertest(precisionk, draw = 'False'):
-    cleandata = pd.read_csv("./data/cleaned.csv")
-    mask = np.isnan(cleandata['Y'])
-    cleandata = cleandata[mask == False]
-    cleandata = cleandata.drop('Unnamed: 0', 1)
-    #After c is chosen, use this to draw AUC plot
-    train_id, test_id = train_test_split(cleandata.index, test_size=0.2)  # test_ratio = 0.2
-    train = cleandata.ix[train_id]
-    test = cleandata.ix[test_id]
-    coltest = precisionCol(train, precisionk)
-    coltest = list(coltest)
-    coltest.append('Y')
-    train = train[coltest]
-    test = test[coltest]
-    model = SVR()
-    model.fit(train.drop('Y',1),train['Y'])
-    fpr, tpr, thresholds = roc_curve(test['Y'], model.decision_function(test.drop('Y',1)))
-    print auc(fpr, tpr)
-    if draw == 'True':
-        plotAUC(test['Y'], model.decision_function(test.drop('Y',1)), 'Gradient Boosting')
-        plt.savefig("testnorm_randomforest.png", dpi = 120)
-
 
 
 def main():
-    #othertest(1000)
-    gbrtest(3000, min_sampleleaf=15, min_samplesplit=20)
+    othertest(3050)
+    #othersubmission(3050)
+    #gbrtest(3000, min_sampleleaf=15, min_samplesplit=20)
     #submissiongbr(3000, min_sampleleaf=15, min_samplesplit=20)
-    #rfttest(precisionk= 3000, min_sampleleaf=15, min_samplesplit=10)
-    #submissionrft(precisionk=3000, min_sampleleaf=15, min_samplesplit=10)
-    #auctest(50, 0.1, 'False')
-    #submissiontest(500, 0.005)
+    #rfttest(precisionk= 3050, min_sampleleaf=10, min_samplesplit=10)
+    #submissionrft(precisionk=3050, min_sampleleaf=1, min_samplesplit=1)
+    #auctest(3000, 0.0005, 'False')
+    #submissiontest(3000, 0.0005)
     #for c in range(1,1001,200):
     #    ctest(c)
 

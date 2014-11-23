@@ -4,7 +4,7 @@ import sklearn.preprocessing as preprocessing
 
 
 def precisionCol(cleandata, k):
-    model = GraphLassoCV(mode = 'lars', n_jobs=8, max_iter=300)
+    model = GraphLasso(mode = 'lars')
     model.fit(cleandata)
     pre_ = pd.DataFrame(model.get_precision())
     pre_.index = cleandata.columns

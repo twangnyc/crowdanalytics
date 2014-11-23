@@ -91,6 +91,7 @@ def dummyData(df):
         n_value = len(data[col].value_counts())
         if n_value > 2:
             dummy = pd.get_dummies(data[col], col)
+            dummy = dummy.drop(dummy.columns[0],1)
             data = data.join(dummy)
             data = data.drop(col, 1)
     print "Create %d dummy variables" % (len(data.columns)-len(df.columns))
